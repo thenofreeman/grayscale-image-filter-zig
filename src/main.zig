@@ -1,3 +1,7 @@
+const std = @import("std");
+
+const stdout = std.io.getStdOut().writer();
+
 const c = @cImport({
     @cDefine("_NO_CRT_STDIO_INLINE", "1");
     @cInclude("stdio.h");
@@ -101,13 +105,13 @@ fn savePNG(image_header: *c.spng_ihdr, buffer: []u8) !void {
     if (c.fclose(file_descriptor) != 0) {
         return error.CouldNotCloseFileDescriptor;
     }
-
+}
 
 pub fn main() !void {
     const path = "image.png";
-    const file_descriptor = c.fopen(path, "fb");
+    const file_descriptor = c.fopen(path, "rb");
 
-    if (file_descriptor = null) {
+    if (file_descriptor == null) {
         @panic("Could not open file!");
     }
 
@@ -118,22 +122,24 @@ pub fn main() !void {
         @ptrCast(file_descriptor)
     );
 
-    if (c.fclose(file_descriptor) != 0) {
-        return error.CouldNotCloseFileDescriptor;
-    }
-
-
     var image_header = try getImageHeader(ctx);
 
-    const output_size = try calc_output_size(ctx);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+
+    const output_size = try calcOutputSize(ctx);
     var buffer = try allocator.alloc(u8, output_size);
     @memset(buffer[0..], 0);
 
     try readDataToBuffer(ctx, buffer[0..]);
 
+    if (c.fclose(file_descriptor) != 0) {
+        return error.CouldNotCloseFileDescriptor;
+    }
+
     try stdout.print("{any}\n", .{buffer[0..12]});
 
     try applyImageFilter(buffer[0..]);
 
-    try save_png(&image_header, buffer[0..]);
+    try savePNG(&image_header, buffer[0..]);
 }
